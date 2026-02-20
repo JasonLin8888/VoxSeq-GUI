@@ -3,34 +3,46 @@ library(shiny)
 source("engine/engine.R")
 
 ui <- fluidPage(
-  titlePanel("VoxSeq GUI"),
+   titlePanel("VoxSeq GUI"),
 
-  fileInput(
-    inputId = "usv_files",
-    label   = "Upload USV Excel files (.xlsx)",
-    multiple = TRUE,
-    accept = c(".xls", ".xlsx")
-  ),
+  sidebarLayout(
+  
+     sidebarPanel(
+      h4("Welcome to the VoxSeq GUI!"),
+      p("Upload your USV Excel files and set the parameters for analysis. Click 'Run analysis' to process the data and generate plots. You can preview some of the plots to the right and download all of them as a ZIP file."),
 
-  fluidRow(
-    column(
-      4,
-      numericInput("min_calls", "Minimum calls", value = 200, min = 0, step = 1),
-      numericInput("min_IGI",   "Min IGI (seconds)", value = 0.125, min = 0, step = 0.001),
-      numericInput("min_IBI",   "Min IBI (seconds)", value = 0.225, min = 0, step = 0.001),
-      actionButton("run_btn", "Run analysis", class = "btn-primary"),
-      hr(),
-      verbatimTextOutput("status"),
-      downloadButton("download_zip", "Download plots (ZIP)")
-    ),
-    column(
-      8,
+      helpText("Note: The analysis may take some time depending on the number and size of the uploaded files. Please be patient!"),
+     
+      fileInput(
+        inputId = "usv_files",
+        label   = "Upload USV Excel files (.xlsx)",
+        multiple = TRUE,
+        accept = c(".xls", ".xlsx"),
+        width = "100%"
+      ),
+      fluidRow()(
+        column(
+          4,
+          numericInput("min_calls", "Minimum calls", value = 200, min = 0, step = 1),
+          numericInput("min_IGI",   "Min IGI (seconds)", value = 0.125, min = 0, step = 0.001),
+          numericInput("min_IBI",   "Min IBI (seconds)", value = 0.225, min = 0, step = 0.001),
+          actionButton("run_btn", "Run analysis", class = "btn-primary"),
+          hr(),
+          verbatimTextOutput("status"),
+          downloadButton("download_zip", "Download plots (ZIP)")
+        ),
+      )
+
+     ),
+     mainPanel(
       h4("Plot preview:"),
       uiOutput("plot_gallery"),
       hr(),
       h4("Files you selected:"),
-      tableOutput("file_table")
-    )
+      tableOutput("file_table")  
+     ),
+  position = "left",
+  fluid = TRUE
   )
 )
 
@@ -84,7 +96,7 @@ server <- function(input, output, session) {
       addResourcePath(prefix, res$plot_dir)
       rv$resource_prefix <- prefix
 
-      # Create zip now (or you can create on download)
+      # Create zip now (look into creating on download)
       zip_path <- file.path(res$run_dir, "plots.zip")
       zip_plots(res$plot_dir, zip_path)
 
@@ -110,16 +122,15 @@ server <- function(input, output, session) {
     plots <- rv$result$plot_files
     if (length(plots) == 0) return(tags$div("No plots found."))
 
-    # Only show PNGs in preview (common in your pipeline)
+    # Only show PNGs in preview
     pngs <- plots[grepl("\\.png$", plots, ignore.case = TRUE)]
     if (length(pngs) == 0) return(tags$div("No PNG plots found to preview."))
 
-    # Show up to 12 to keep UI snappy
-    show <- head(pngs, 12)
+    show <- head(pngs)
 
     tags$div(
       lapply(show, function(p) {
-        rel <- basename(p) # plots are directly inside plot_dir in your pipeline
+        rel <- basename(p)
         src <- paste0("/", rv$resource_prefix, "/", rel)
         tags$div(
           style = "display:inline-block; margin:10px; vertical-align:top;",
