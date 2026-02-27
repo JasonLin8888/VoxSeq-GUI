@@ -20,9 +20,9 @@ ui <- fluidPage(
         accept = c(".xls", ".xlsx"),
         width = "100%"
       ),
-      fluidRow()(
+      fluidRow(
         column(
-          4,
+          12,
           numericInput("min_calls", "Minimum calls", value = 200, min = 0, step = 1),
           numericInput("min_IGI",   "Min IGI (seconds)", value = 0.125, min = 0, step = 0.001),
           numericInput("min_IBI",   "Min IBI (seconds)", value = 0.225, min = 0, step = 0.001),
@@ -30,9 +30,8 @@ ui <- fluidPage(
           hr(),
           verbatimTextOutput("status"),
           downloadButton("download_zip", "Download plots (ZIP)")
-        ),
+        )
       )
-
      ),
      mainPanel(
       h4("Plot preview:"),
@@ -41,8 +40,8 @@ ui <- fluidPage(
       h4("Files you selected:"),
       tableOutput("file_table")  
      ),
-  position = "left",
-  fluid = TRUE
+    position = "left",
+    fluid = TRUE
   )
 )
 
