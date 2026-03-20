@@ -4,6 +4,7 @@ source("engine/engine.R")
 
 ui <- fluidPage(
    titlePanel("VoxSeq GUI"),
+  tags$script(HTML("\n+     Shiny.addCustomMessageHandler('setRemoveButtonsDisabled', function(disabled) {\n+       var buttons = document.querySelectorAll('.remove-file-btn');\n+       buttons.forEach(function(btn) {\n+         btn.disabled = !!disabled;\n+       });\n+     });\n+   ")),
 
   sidebarLayout(
   
@@ -38,7 +39,8 @@ ui <- fluidPage(
       uiOutput("plot_gallery"),
       hr(),
       h4("Files you selected:"),
-      tableOutput("file_table")  
+        uiOutput("remove_all_btn"),
+        uiOutput("file_table")
      ),
     position = "left",
     fluid = TRUE
@@ -47,17 +49,80 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   rv <- reactiveValues(
+    uploaded_files = NULL,
     result = NULL,
     zip_path = NULL,
-    resource_prefix = NULL
+    resource_prefix = NULL,
+    is_running = FALSE
   )
 
-  output$file_table <- renderTable({
-    req(input$usv_files)
-    data.frame(
-      filename = input$usv_files$name,
-      size_kb  = round(input$usv_files$size / 1024, 1),
-      stringsAsFactors = FALSE
+  observeEvent(input$usv_files, {
+    rv$uploaded_files <- input$usv_files
+  })
+
+  observeEvent(input$remove_file_index, {
+    req(!is.null(rv$uploaded_files), nrow(rv$uploaded_files) > 0)
+    req(!isTRUE(rv$is_running))
+    idx <- suppressWarnings(as.integer(input$remove_file_index))
+    req(!is.na(idx), idx >= 1, idx <= nrow(rv$uploaded_files))
+    rv$uploaded_files <- rv$uploaded_files[-idx, , drop = FALSE]
+  })
+
+  observeEvent(input$remove_all_files, {
+    req(!isTRUE(rv$is_running))
+    req(!is.null(rv$uploaded_files), nrow(rv$uploaded_files) > 0)
+    rv$uploaded_files <- rv$uploaded_files[0, , drop = FALSE]
+  })
+
+  output$remove_all_btn <- renderUI({
+    files <- rv$uploaded_files
+    has_files <- !is.null(files) && nrow(files) > 0
+    tags$div(
+      style = "margin-bottom:10px;",
+      tags$button(
+        type = "button",
+        class = "btn btn-danger",
+        disabled = if (isTRUE(rv$is_running) || !has_files) "disabled" else NULL,
+        onclick = "Shiny.setInputValue('remove_all_files', Date.now(), {priority: 'event'})",
+        "Remove all files"
+      )
+    )
+  })
+
+  output$file_table <- renderUI({
+    files <- rv$uploaded_files
+
+    if (is.null(files) || nrow(files) == 0) {
+      return(tags$div("No files selected."))
+    }
+
+    tags$table(
+      class = "table table-striped table-condensed",
+      tags$thead(
+        tags$tr(
+          tags$th("Filename"),
+          tags$th("Size (KB)"),
+          tags$th("Remove")
+        )
+      ),
+      tags$tbody(
+        lapply(seq_len(nrow(files)), function(i) {
+          tags$tr(
+            tags$td(files$name[i]),
+            tags$td(round(files$size[i] / 1024, 1)),
+            tags$td(
+              tags$button(
+                type = "button",
+                class = "btn btn-danger btn-xs remove-file-btn",
+                title = "Remove file",
+                disabled = if (isTRUE(rv$is_running)) "disabled" else NULL,
+                onclick = sprintf("Shiny.setInputValue('remove_file_index', %d, {priority: 'event'})", i),
+                "X"
+              )
+            )
+          )
+        })
+      )
     )
   })
 
@@ -72,7 +137,14 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$run_btn, {
-    req(input$usv_files)
+    req(!is.null(rv$uploaded_files), nrow(rv$uploaded_files) > 0)
+
+    rv$is_running <- TRUE
+    session$sendCustomMessage("setRemoveButtonsDisabled", TRUE)
+    on.exit({
+      rv$is_running <- FALSE
+      session$sendCustomMessage("setRemoveButtonsDisabled", FALSE)
+    }, add = TRUE)
 
     rv$result <- NULL
     rv$zip_path <- NULL
@@ -82,7 +154,7 @@ server <- function(input, output, session) {
       incProgress(0.1, detail = "Preparing run...")
 
       res <- run_voxseq_pipeline(
-        uploaded_files_df = input$usv_files,
+        uploaded_files_df = rv$uploaded_files,
         min_calls = input$min_calls,
         min_IGI = input$min_IGI,
         min_IBI = input$min_IBI
